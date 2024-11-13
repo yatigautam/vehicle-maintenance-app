@@ -1,0 +1,13 @@
+.analytics {
+    flex: 1;
+  }
+  
+  .chart-placeholder {
+    background-color: #e0e0e0;
+    height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+  }
+  
