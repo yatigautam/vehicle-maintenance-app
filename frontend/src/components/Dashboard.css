@@ -14,3 +14,26 @@
     margin: 0 auto;
   }
   
+.forecast {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+
+.forecast h2 {
+  font-size: 1.2em;
+  margin-bottom: 10px;
+}
+
+.forecast ul {
+  list-style: none;
+  padding: 0;
+}
+
+.forecast li {
+  margin-bottom: 8px;
+}
+
+  
