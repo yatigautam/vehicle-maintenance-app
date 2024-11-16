@@ -1,106 +1,132 @@
-from flask import Flask, request, jsonify
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import LinearRegression
+from datetime import datetime, timedelta
 from sklearn.model_selection import train_test_split
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense
-from tensorflow.keras.preprocessing.sequence import TimeseriesGenerator
-from flask_cors import CORS  # For enabling cross-origin requests
-import logging
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import LabelEncoder
+import tensorflow as tf
+from keras.models import Sequential
+from keras.layers import LSTM, Dense
+import os
 
-logging.basicConfig(level=logging.DEBUG)
+# Initialize the FastAPI app
+app = FastAPI()
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to the Vehicle Maintenance API!"}
 
-app = Flask(__name__)
-CORS(app)  # Enable CORS for frontend-backend communication
+@app.get("/status")
+def get_status():
+    return {"status": "running"}
 
-# Load dataset
-DATASET_PATH = "../frontend/src/data/vehicle_data.csv"
+# File paths
+DATASET_PATH = "frontend/src/data/vehicle_data.csv"  # Ensure this file exists at the specified path
 
-@app.route('/')
-def home():
-    """Health check endpoint."""
-    return "Server is running!"
+@app.get("/test-dataset")
+def test_dataset():
+    try:
+        with open(DATASET_PATH, 'r') as f:
+            return {"message": "Dataset loaded successfully."}
+    except FileNotFoundError:
+        return {"message": "Dataset not found."}
 
-@app.route('/vehicle-data', methods=['GET'])
-def get_vehicle_data():
-    """
-    Fetches vehicle data from the CSV file.
-    """
+# Load the dataset
+def load_data():
     try:
         data = pd.read_csv(DATASET_PATH)
-        return data.to_json(orient='records')
+        return data
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="Dataset not found. Check the file path.")
     except Exception as e:
-        return jsonify({'error': f"Error reading dataset: {str(e)}"}), 500
+        raise HTTPException(status_code=500, detail=f"Error loading data: {str(e)}")
 
-@app.route('/predictive-analysis', methods=['POST'])
+
+@app.get("/fetch-current-data")
+def fetch_current_data():
+    """
+    Fetch the latest data from the dataset.
+    """
+    data = load_data()
+    latest_data = data.iloc[-1]  # Get the most recent row
+    current_data = {
+        "Temperature": latest_data["Temperature"],
+        "Engine RPM": latest_data["Engine rpm"],
+        "Lub Oil Pressure": latest_data["Lub oil pressure"],
+        "Coolant Pressure": latest_data["Coolant pressure"],
+    }
+    return JSONResponse(content=current_data)
+
+
+@app.post("/predictive-analysis")
 def predictive_analysis():
     """
-    Performs predictive analysis on vehicle data.
+    Predict the engine condition based on the dataset.
     """
     try:
-        # Load and preprocess data
-        data = pd.read_csv(DATASET_PATH)
+        data = load_data()
         features = ['Lub oil pressure', 'Coolant pressure', 'Engine rpm']
         target = 'Engine Condition'
         
-        # Add dummy target column if not present
-        if target not in data.columns:
-            data[target] = np.random.uniform(0, 1, len(data))  # Dummy target for testing
-
+        # Encode target variable if categorical
+        label_encoder = LabelEncoder()
+        if data[target].dtype == 'object':
+            data[target] = label_encoder.fit_transform(data[target])
+        
         X = data[features]
         y = data[target]
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-        # Train a simple regression model
         model = LinearRegression()
         model.fit(X_train, y_train)
-        predictions = model.predict(X_test)
-        
-        return jsonify({'predictions': predictions.tolist()})
-    except KeyError as e:
-        return jsonify({'error': f"Missing columns in dataset: {str(e)}"}), 400
-    except Exception as e:
-        return jsonify({'error': f"Error during predictive analysis: {str(e)}"}), 500
+        predictions = model.predict([X.iloc[-1].values])  # Predict using the latest data
 
-@app.route('/time-series-forecast', methods=['POST'])
-def time_series_forecast():
+        # Decode the condition label if encoded
+        predicted_condition = label_encoder.inverse_transform([int(round(predictions[0]))])[0]
+        return {"Predicted Engine Condition": predicted_condition}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error in predictive analysis: {str(e)}")
+
+
+@app.post("/time-series-forecasting")
+def time_series_forecasting():
     """
-    Performs time-series forecasting using an LSTM model.
+    Predict the next maintenance schedule using time series forecasting.
     """
     try:
-        # Load and preprocess data
-        data = pd.read_csv(DATASET_PATH)
-        target = 'Lub oil pressure'
-        if target not in data.columns:
-            return jsonify({'error': f'Column "{target}" not found in dataset'}), 400
+        data = load_data()
+        temperatures = data['Temperature'].values.reshape(-1, 1)
 
-        # Prepare data for LSTM
-        sequence_data = data[target].values.reshape(-1, 1)
-        generator = TimeseriesGenerator(sequence_data, sequence_data, length=10, batch_size=1)
-
-        # Define LSTM model
+        # Define the LSTM model
         model = Sequential([
-            LSTM(50, activation='relu', input_shape=(10, 1)),
+            LSTM(50, return_sequences=False, input_shape=(1, 1)),
             Dense(1)
         ])
         model.compile(optimizer='adam', loss='mse')
-        model.fit(generator, epochs=5, verbose=1)
 
-        # Forecast next 10 values
-        forecast = model.predict(sequence_data[-10:].reshape(1, 10, 1))
-        return jsonify({'forecast': forecast.flatten().tolist()})
-    except KeyError as e:
-        return jsonify({'error': f"Missing columns in dataset: {str(e)}"}), 400
+        # Prepare the data
+        temperatures_normalized = temperatures / np.max(temperatures)  # Normalize data
+        X = temperatures_normalized[:-1]
+        y = temperatures_normalized[1:]
+        X = np.expand_dims(X, axis=1)  # Reshape for LSTM
+
+        model.fit(X, y, epochs=10, batch_size=1, verbose=0)  # Train the model
+
+        # Predict the next value
+        last_temp = temperatures_normalized[-1].reshape(1, 1, 1)
+        next_temp = model.predict(last_temp).flatten()[0]
+        next_temp_denormalized = next_temp * np.max(temperatures)
+
+        # Schedule maintenance based on predicted temperature
+        alert = None
+        if next_temp_denormalized > 100:  # Critical threshold
+            alert = "Alert: High temperature detected! Immediate maintenance required."
+
+        return {
+            "Next Predicted Temperature": next_temp_denormalized,
+            "Scheduled Maintenance": (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d'),
+            "Alert": alert
+        }
     except Exception as e:
-        return jsonify({'error': f"Error during time-series forecasting: {str(e)}"}), 500
-
-@app.errorhandler(404)
-def route_not_found(error):
-    """
-    Handles 404 errors for undefined routes.
-    """
-    return jsonify({'error': 'Route not found. Check the endpoint URL and method.'}), 404
-
-if __name__ == '__main__':
-    app.run(debug=True)
+        raise HTTPException(status_code=500, detail=f"Error in time-series forecasting: {str(e)}")
