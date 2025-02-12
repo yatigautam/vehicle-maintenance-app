@@ -17,7 +17,7 @@ const VehicleApp = () => {
 
     const predictiveAnalysis = async () => {
         try {
-          const response = await axios.post('http://127.0.0.1:8000/predictive-analysis');
+          const response = await axios.post('https://vehicle-maintenance-app.onrender.com//predictive-analysis');
           setData(response.data);
           setError(null);
         } catch (err) {
@@ -27,7 +27,7 @@ const VehicleApp = () => {
 
       const timeSeriesForecasting = async () => {
         try {
-          const response = await axios.post('http://127.0.0.1:8000/time-series-forecasting/');
+          const response = await axios.post('https://vehicle-maintenance-app.onrender.com//time-series-forecasting/');
           setData(response.data);
           setError(null);
         } catch (err) {
@@ -37,7 +37,7 @@ const VehicleApp = () => {
       
       const componentAnalysis = async () => {
         try {
-            const response = await axios.post('http://127.0.0.1:8000/component-fixation/');
+            const response = await axios.post('https://vehicle-maintenance-app.onrender.com//component-fixation/');
             setData(response.data);
             setError(null);
         } catch (err) {
