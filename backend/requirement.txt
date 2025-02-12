@@ -2,4 +2,5 @@ fastapi==0.95.0
 uvicorn==0.22.0
 pandas==1.5.3
 numpy==1.24.0
-scikit-learn==1.2.0  # or specify another version if needed
+scikit-learn==1.2.0
+tensorflow==2.11.0  # Specify the TensorFlow version you need
