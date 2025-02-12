@@ -7,7 +7,7 @@ const VehicleApp = () => {
 
     const fetchData = async (endpoint) => {
         try {
-            const response = await axios.get(`http://127.0.0.1:8000/${endpoint}`);
+            const response = await axios.get(`http://127.0.0.1:8000/fetch_current_data`);
             setData(response.data);
             setError(null);
         } catch (err) {
@@ -24,13 +24,46 @@ const VehicleApp = () => {
           setError(err.response?.data?.detail || 'Error in predictive analysis');
         }
       };
+
+      const timeSeriesForecasting = async () => {
+        try {
+          const response = await axios.post('http://127.0.0.1:8000/time-series-forecasting/');
+          setData(response.data);
+          setError(null);
+        } catch (err) {
+          setError(err.response?.data?.detail || 'Error in time-series forecasting');
+        }
+      };
       
+      const componentAnalysis = async () => {
+        try {
+            const response = await axios.post('http://127.0.0.1:8000/component-fixation/');
+            setData(response.data);
+            setError(null);
+        } catch (err) {
+            setError(err.response?.data?.detail || 'Error in component analysis');
+        }
+    };
 
     return (
         <div>
             <h1>Vehicle Maintenance App</h1>
-            <button onClick={() => fetchData("fetch-current-data")}>Fetch Current Data</button>
+            <button onClick={() => fetchData("fetch_current_data")}>Fetch Current Data</button>
             <button onClick={predictiveAnalysis}>Run Predictive Analysis</button>
+            <button onClick={timeSeriesForecasting}>Time-Series Forecast</button>
+            <button onClick={componentAnalysis}>Run Component Analysis</button>
+            
+            {data && data?.component_analysis && (
+                <div className="card">
+                    <h2>Component Analysis</h2>
+                    <ul>
+                        {data.component_analysis.map((item, index) => (
+                            <li key={index}>{item}</li>
+                        ))}
+                    </ul>
+                </div>
+                )}
+                
             {data && (
         <div className="card">
           <h2>Prediction</h2>
@@ -38,7 +71,7 @@ const VehicleApp = () => {
           <p>Recommended Action: {data?.action}</p>
         </div>
       )}
-            <button onClick={() => fetchData("time-series-forecasting")}>Time-Series Forecast</button>
+            
             {data && <pre>{JSON.stringify(data, null, 2)}</pre>}
             {error && <p style={{ color: 'red' }}>{error}</p>}
         </div>
